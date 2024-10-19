@@ -1,24 +1,30 @@
-# consumer.py
-import pika
+import aio_pika
+import asyncio
+
+from rabbitmq_connection import AsyncRabbitMQConnection
 
 
-def callback(ch, method, properties, body):
-    print(f"Received: {body.decode()}")
+# Функция обратного вызова для обработки полученных сообщений
+async def callback(message: aio_pika.IncomingMessage):
+    async with message.process():
+        print(f" [x] Received {message.body.decode()}")
+        # Симуляция длительного выполнения
+        await asyncio.sleep(10)  # Ожидание 5 секунд (симуляция длительной обработки)
+        print(" [x] Done processing the message.")
 
+# Асинхронная функция для получения сообщений из очереди
+async def consume():
+    rabbit_connection = AsyncRabbitMQConnection()
+    await rabbit_connection.connect()
+    channel = await rabbit_connection.get_channel()
 
-def consume_messages():
-    connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
-    channel = connection.channel()
+    queue = await channel.declare_queue("json_queue")
+    await queue.consume(callback)
 
-    # Declare the same queue we used for sending messages
-    channel.queue_declare(queue='hello_queue', durable=True)
-
-    # Set up a consumer and start listening
-    channel.basic_consume(queue='hello_queue', on_message_callback=callback, auto_ack=True)
-
-    print("Waiting for messages. To exit, press CTRL+C")
-    channel.start_consuming()
+    print(" [*] Waiting for messages. To exit press CTRL+C")
 
 
 if __name__ == "__main__":
-    consume_messages()
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(consume())
+    loop.run_forever()
